@@ -1,6 +1,7 @@
 mod utils;
 
 use wasm_bindgen::prelude::*;
+use js_sys;
 
 use std::rc::Rc;
 
@@ -20,24 +21,53 @@ enum DataViewMut {
     F64(*mut [f64]),
 }
 
+pub trait Array {
+    fn get();
+}
+
 #[wasm_bindgen]
 pub struct Ndarray {
     data : Data,
+    shape : Vec<usize>,
+    strides : Vec<usize>,
+    ndim : usize,
 }
 
 #[wasm_bindgen]
 impl Ndarray {
     #[wasm_bindgen(constructor)]
-    pub fn new_i32(input: Box<[i32]>) -> Ndarray {
+    pub fn new(input: js_sys::Array) -> Ndarray{
+        let mut shape : Vec<usize>= Vec::new();
+        let array = Ndarray::flatten_jsarray(input.to_vec(),&mut shape);
         Ndarray{
-            data : Data::I32(Rc::from(input)),
+            data: Data::F64(Rc::from(array)),
+            ndim : shape.len(),
+            shape : shape.clone(),
+            strides : shape,
         }
     }
-    #[wasm_bindgen(constructor)]
-    pub fn new_f64(input: Box<[f64]>) -> Ndarray {
-        Ndarray{
-            data : Data::F64(Rc::from(input)),
+}
+
+impl Ndarray {
+    fn flatten_jsarray(input: Vec<JsValue>, shape : &mut Vec<usize>) -> Vec<f64> {
+        match js_sys::Array::is_array(&input[0]) {
+            true => {
+                shape.push(input.len());
+                let array = input.into_iter().flat_map(|x| js_sys::Array::from(&x).to_vec()).collect();
+                Ndarray::flatten_jsarray(array, shape)
+            }
+            false => {
+                let array : Vec<f64> = input.into_iter().map(|x : JsValue| x.as_f64().unwrap()).collect();
+                shape.push(array.len());
+                array
+            },
         }
+    }
+}
+
+impl Array for Ndarray {
+    fn get() {
+        unimplemented!()
     }
 }
 
@@ -61,6 +91,12 @@ impl NdarrayView {
     }
 }
 
+impl Array for NdarrayView {
+    fn get() {
+        unimplemented!()
+    }
+}
+
 #[wasm_bindgen]
 pub struct NdarrayViewMut {
     data : DataViewMut
@@ -68,13 +104,22 @@ pub struct NdarrayViewMut {
 
 #[wasm_bindgen]
 impl NdarrayViewMut {
-    fn new(ndarray: &mut Ndarray) -> NdarrayViewMut {
+    fn new(ndarray: &mut Ndarray) -> Result<NdarrayViewMut,JsValue> {
+
         match ndarray.data {
-            Data::I32(ref mut data1) => NdarrayViewMut{
-                data : DataViewMut::I32(Rc::get_mut(data1).unwrap()),
+            Data::I32(ref mut data) =>
+            match Rc::get_mut(data) {
+                Some(mut_ref) => Ok(NdarrayViewMut{
+                    data : DataViewMut::I32(mut_ref),
+                }),
+                None => Err(JsValue::from_str("Data must have single owner to be mutated"))
             },
-            Data::F64(ref mut data1) => NdarrayViewMut{
-                data : DataViewMut::F64(Rc::get_mut(data1).unwrap()),
+            Data::F64(ref mut data) =>
+            match Rc::get_mut(data) {
+                Some(mut_ref) => Ok(NdarrayViewMut{
+                    data : DataViewMut::F64(mut_ref),
+                }),
+                None => Err(JsValue::from_str("Data must have single owner to be mutated"))
             }
         }
 
