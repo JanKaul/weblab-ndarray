@@ -1,5 +1,5 @@
 {
-  "name": "create-wasm-app",
+  "name": "weblab-ndarray",
   "version": "0.1.0",
   "description": "create an app to consume rust-generated wasm packages",
   "main": "index.js",
@@ -20,12 +20,15 @@
     "rust",
     "webpack"
   ],
-  "author": "Ashley Williams <ashley666ashley@gmail.com>",
+  "author": "Jan Kaul",
   "license": "(MIT OR Apache-2.0)",
   "bugs": {
     "url": "https://github.com/rustwasm/create-wasm-app/issues"
   },
   "homepage": "https://github.com/rustwasm/create-wasm-app#readme",
+  "dependencies": {
+    "weblab-ndarray": "file:../pkg"
+  },
   "devDependencies": {
     "hello-wasm-pack": "^0.1.0",
     "webpack": "^4.29.3",
