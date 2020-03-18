@@ -1,9 +1,10 @@
-use js_sys;
-use std::convert::TryInto;
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-
 use std::rc::Rc;
+
+use js_sys;
+
+use wasm_bindgen::prelude::*;
+
+use super::js_interop;
 
 pub enum Data {
     I32(Rc<[i32]>),
@@ -21,10 +22,10 @@ pub struct Ndarray {
 impl Ndarray {
     #[wasm_bindgen(constructor)]
     pub fn new(input: JsValue) -> Result<Ndarray, JsValue> {
-        match unwrap_js_value(input)? {
-            JsType::Array(array) => {
+        match js_interop::unwrap_js_value(input)? {
+            js_interop::JsType::Array(array) => {
                 let mut shape: Vec<usize> = Vec::new();
-                let flat_array = flatten_jsarray(array, &mut shape);
+                let flat_array = js_interop::flatten_jsarray(array, &mut shape);
                 let data: Rc<[f64]> = flat_array.iter().map(|x| x.as_f64().unwrap()).collect();
                 Ok(Ndarray {
                     data: Data::F64(data),
@@ -32,7 +33,7 @@ impl Ndarray {
                     shape: shape,
                 })
             }
-            JsType::Int32Array(array) => {
+            js_interop::JsType::Int32Array(array) => {
                 let vec = array.to_vec();
                 Ok(Ndarray {
                     shape: vec![vec.len()],
@@ -40,7 +41,7 @@ impl Ndarray {
                     strides: vec![1],
                 })
             }
-            JsType::Float64Array(array) => {
+            js_interop::JsType::Float64Array(array) => {
                 let vec = array.to_vec();
                 Ok(Ndarray {
                     shape: vec![vec.len()],
@@ -53,7 +54,7 @@ impl Ndarray {
     }
 
     pub fn reshape(&mut self, shape: &js_sys::Array) -> Result<(), JsValue> {
-        let vec = into_vec_usize(shape)?;
+        let vec = js_interop::into_vec_usize(shape)?;
         if vec.iter().product::<usize>() == self.shape.iter().product::<usize>() {
             self.strides = Ndarray::get_strides_from_shape(&vec);
             Ok(())
@@ -112,50 +113,4 @@ impl Ndarray {
     pub fn data(&mut self) -> &mut Data {
         &mut self.data
     }
-}
-
-fn flatten_jsarray(input: js_sys::Array, shape: &mut Vec<usize>) -> js_sys::Array {
-    if js_sys::Array::is_array(&input.get(0)) {
-        shape.push(input.length().try_into().unwrap());
-        flatten_jsarray(input.flat(1), shape)
-    } else {
-        shape.push(input.length().try_into().unwrap());
-        input
-    }
-}
-
-enum JsType {
-    Number(f64),
-    Array(js_sys::Array),
-    Int32Array(js_sys::Int32Array),
-    Float64Array(js_sys::Float64Array),
-}
-
-fn unwrap_js_value(input: JsValue) -> Result<JsType, JsValue> {
-    if let Some(number) = input.as_f64() {
-        Ok(JsType::Number(number))
-    } else if input.is_instance_of::<js_sys::Array>() {
-        Ok(JsType::Array(input.unchecked_into::<js_sys::Array>()))
-    } else if input.is_instance_of::<js_sys::Int32Array>() {
-        Ok(JsType::Int32Array(
-            input.unchecked_into::<js_sys::Int32Array>(),
-        ))
-    } else if input.is_instance_of::<js_sys::Float64Array>() {
-        Ok(JsType::Float64Array(
-            input.unchecked_into::<js_sys::Float64Array>(),
-        ))
-    } else {
-        Err(JsValue::from_str("JsValue type not supported"))
-    }
-}
-
-fn into_vec_usize(input: &js_sys::Array) -> Result<Vec<usize>, JsValue> {
-    input
-        .iter()
-        .into_iter()
-        .map(|x: JsValue| match x.as_f64() {
-            Some(n) => Ok(n as usize),
-            None => Err(JsValue::from_str("Indices must be only numbers")),
-        })
-        .collect()
 }
