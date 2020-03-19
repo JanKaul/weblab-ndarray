@@ -1,8 +1,8 @@
 //! # Weblab-ndarray
 
+mod iter;
 mod js_interop;
 mod ndarray;
-mod ndarray_mut;
 mod utils;
 
 use wasm_bindgen::prelude::*;
@@ -10,7 +10,6 @@ use wasm_bindgen::prelude::*;
 use std::rc::Rc;
 
 pub use ndarray::*;
-pub use ndarray_mut::*;
 
 #[wasm_bindgen(start)]
 pub fn main() {
