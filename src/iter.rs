@@ -12,13 +12,13 @@ impl<T> NdarrayBase<T> {
 
 #[derive(Debug)]
 pub struct IterNdarrayBase<'a, T> {
-    ndarray: std::slice::Iter<'a, T>,
+    slice: std::slice::Iter<'a, T>,
 }
 
 impl<'a, T> Iterator for IterNdarrayBase<'a, T> {
     type Item = &'a T;
     fn next(&mut self) -> Option<Self::Item> {
-        self.ndarray.next()
+        self.slice.next()
     }
 }
 
@@ -27,20 +27,20 @@ impl<'a, T> IntoIterator for &'a NdarrayBase<T> {
     type IntoIter = IterNdarrayBase<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
         IterNdarrayBase {
-            ndarray: self.data().iter(),
+            slice: self.data().iter(),
         }
     }
 }
 
 #[derive(Debug)]
 pub struct IterMutNdarrayBase<'a, T> {
-    ndarray: std::slice::IterMut<'a, T>,
+    slice: std::slice::IterMut<'a, T>,
 }
 
 impl<'a, T> Iterator for IterMutNdarrayBase<'a, T> {
     type Item = &'a mut T;
     fn next(&mut self) -> Option<Self::Item> {
-        self.ndarray.next()
+        self.slice.next()
     }
 }
 
@@ -49,7 +49,7 @@ impl<'a, T> IntoIterator for &'a mut NdarrayBase<T> {
     type IntoIter = IterMutNdarrayBase<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
         IterMutNdarrayBase {
-            ndarray: Rc::get_mut(self.data_mut()).unwrap().iter_mut(),
+            slice: Rc::get_mut(self.data_mut()).unwrap().iter_mut(),
         }
     }
 }
