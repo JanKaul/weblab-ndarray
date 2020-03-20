@@ -1,5 +1,3 @@
-//! # Weblab-ndarray
-//!
 //! Efficient wasm-implementation of an n-dimensional Array for Javascript
 //!
 //! Wasm restrictions on Rust (at least at wasm boundary):

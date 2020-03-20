@@ -1,12 +1,15 @@
-# weblab
+# weblab-ndarray
 
-Numerical suite for javascript
+Efficient wasm-implementation of an n-dimensional Array for Javascript
 
-## wl-ndarray
+Wasm restrictions on Rust (at least at wasm boundary):
+- No generics
+- No polymorphims (no traits)
+- No lifetimes
 
-- n-dimensional array for numerical computing
+Solutions:
+- no generics => enum NdarrayUnion for different type parameters for Ndarray
+- no polymorphism => enum Subview for different behavior of ndarrays
+- no lifetimes => Using if reference counting (std::rc::Rc), unsafe
 
-### TODO
-
-
-- factor out converting of JsValues and javascript arrays
+Using enums requires minimally more memory (2 enums = 2 Byte)
