@@ -1,3 +1,4 @@
+use adjacent_pair_iterator::AdjacentPairIterator;
 use std::rc::Rc;
 
 use js_sys;
@@ -207,8 +208,37 @@ impl Ndarray {
         }
     }
 
-    pub fn pick() {
-        unimplemented!()
+    pub fn pick(&self, input: js_sys::Array) -> Result<Ndarray, JsValue> {
+        let input = input.to_vec();
+        let mut input = input
+            .iter()
+            .map(|x| -> Result<Vec<usize>, JsValue> {
+                js_interop::into_vec_usize(&js_sys::Array::from(&x))
+            })
+            .collect::<Result<Vec<Vec<usize>>, JsValue>>()?;
+        let shape = input.iter().map(|x| x.len()).collect();
+        let picks = input
+            .iter_mut()
+            .map(|mut x| {
+                let mut vec = vec![0];
+                vec.append(&mut x);
+                vec.iter().adjacent_pairs().map(|(x, y)| y - x).collect()
+            })
+            .collect();
+        match &self.0 {
+            NdarrayUnion::I32(ndarray) => Ok(Ndarray(NdarrayUnion::I32(NdarrayBase {
+                data: ndarray.data.clone(),
+                strides: self.strides().clone(),
+                shape: shape,
+                subview: Subview::Pick(picks),
+            }))),
+            NdarrayUnion::F64(ndarray) => Ok(Ndarray(NdarrayUnion::F64(NdarrayBase {
+                data: ndarray.data.clone(),
+                strides: self.strides().clone(),
+                shape: shape,
+                subview: Subview::Pick(picks),
+            }))),
+        }
     }
 }
 
