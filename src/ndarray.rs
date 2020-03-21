@@ -49,6 +49,22 @@ impl<T> NdarrayBase<T> {
     pub fn data_mut(&mut self) -> &mut Rc<[T]> {
         &mut self.data
     }
+    /// Returns a immutable referene to the data of the NdarrayBase.
+    pub fn shape(&self) -> &Vec<usize> {
+        &self.shape
+    }
+    /// Returns a mutable reference to the data of the NdarrayBase.
+    pub fn shape_mut(&mut self) -> &mut Vec<usize> {
+        &mut self.shape
+    }
+    /// Returns a immutable referene to the data of the NdarrayBase.
+    pub fn strides(&self) -> &Vec<usize> {
+        &self.strides
+    }
+    /// Returns a mutable reference to the data of the NdarrayBase.
+    pub fn strides_mut(&mut self) -> &mut Vec<usize> {
+        &mut self.strides
+    }
 }
 
 /// Describes if a `Ndarray` behaves like a contigious subview (`Slice`), a set along selected axis (`Pick`) or normally (`None`)
@@ -106,7 +122,7 @@ impl Ndarray {
                 }
                 _ => panic!("Input must be some kind of Array."),
             },
-            Err(_) => panic!("JsValue type not supported"),
+            Err(_) => panic!("Datatype not supported"),
         }
     }
 
@@ -150,6 +166,7 @@ impl Ndarray {
     /// Because the slice references the original memory, it should be used for computations but it shouldn't be assigned to a new variable. Assigning to a new variable increases the reference count and the underlying data can not be mutated afterwards. Weblab-ndarray doesn't allow mutating data if the reference count of a value is higher than one.
     ///
     /// # Example
+    ///
     pub fn slice(&self, input: js_sys::Array) -> Result<Ndarray, JsValue> {
         let input = input.to_vec();
         let strides = self.strides();
@@ -220,7 +237,8 @@ impl Ndarray {
         let picks = input
             .iter_mut()
             .map(|mut x| {
-                let mut vec = vec![0];
+                let mut vec = Vec::with_capacity(x.len() + 1);
+                vec.push(0);
                 vec.append(&mut x);
                 vec.iter().adjacent_pairs().map(|(x, y)| y - x).collect()
             })

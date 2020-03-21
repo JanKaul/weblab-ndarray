@@ -8,10 +8,11 @@
 //! Solutions:
 //! - no generics => enum NdarrayUnion for different type parameters for Ndarray
 //! - no polymorphism => enum Subview for different behavior of ndarrays
-//! - no lifetimes => Using if reference counting (std::rc::Rc), unsafe
+//! - no lifetimes => Using reference counting (std::rc::Rc), unsafe
 //!
 //! Using enums requires minimally more memory (2 enums = 2 Byte)
 
+mod iter;
 mod js_interop;
 mod ndarray;
 mod utils;
