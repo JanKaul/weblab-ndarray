@@ -1,128 +1,151 @@
 use crate::ndarray::*;
 use std::rc::Rc;
 
-impl<T> NdarrayBase<T> {
-    pub fn iter<'a>(&'a self) -> IterNdarrayBase<'a, T> {
-        self.into_iter()
-    }
-    pub fn iter_mut<'a>(&'a mut self) -> IterMutNdarrayBase<'a, T> {
-        self.into_iter()
-    }
-}
-
-#[derive(Debug)]
-pub struct IterNdarrayBase<'a, T> {
-    slice: std::slice::Iter<'a, T>,
-}
-
-impl<'a, T> Iterator for IterNdarrayBase<'a, T> {
-    type Item = &'a T;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.slice.next()
-    }
-}
-
-impl<'a, T> IntoIterator for &'a NdarrayBase<T> {
-    type Item = &'a T;
-    type IntoIter = IterNdarrayBase<'a, T>;
-    fn into_iter(self) -> Self::IntoIter {
-        IterNdarrayBase {
-            slice: self.data().iter(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct IterMutNdarrayBase<'a, T> {
-    slice: std::slice::IterMut<'a, T>,
-}
-
-impl<'a, T> Iterator for IterMutNdarrayBase<'a, T> {
-    type Item = &'a mut T;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.slice.next()
-    }
-}
-
-impl<'a, T> IntoIterator for &'a mut NdarrayBase<T> {
-    type Item = &'a mut T;
-    type IntoIter = IterMutNdarrayBase<'a, T>;
-    fn into_iter(self) -> Self::IntoIter {
-        IterMutNdarrayBase {
-            slice: Rc::get_mut(self.data_mut()).unwrap().iter_mut(),
-        }
-    }
-}
-
-// use std::iter::FromIterator;
-//
-// impl<'a, S: Copy> FromIterator<&'a S> for NdarrayBase<S> {
-//     fn from_iter<T>(iter: T) -> Self
-//     where
-//         T: IntoIterator<Item = &'a S>,
-//     {
-//         NdarrayBase {
-//             data: iter.into_iter().map(|x| *x).collect(),
-//         }
-//     }
-// }
-
-#[derive(Debug)]
-pub struct IterAxisNdarrayBase<'a, T> {
-    ndarray: std::slice::Iter<'a, T>,
-    axis_len: &'a usize,
-    axis_stride: &'a usize,
+pub struct ViewIter<'a, T> {
+    data: &'a [T],
+    shape: &'a [usize],
+    strides: &'a [usize],
     count: usize,
-    offset: usize,
+    len: usize,
 }
 
-impl<'a, T> Iterator for IterAxisNdarrayBase<'a, T> {
-    type Item = &'a T;
+impl<'a, T> Iterator for ViewIter<'a, T> {
+    type Item = NdarrayView<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.count == 0 {
+        if self.count < self.shape[0] {
+            let count = self.count;
             self.count += 1;
-            self.ndarray.nth(self.offset)
-        } else if self.count < *self.axis_len {
-            self.count += 1;
-            self.ndarray.nth(*self.axis_stride - 1)
+            Some(NdarrayView {
+                data: unsafe {
+                    std::slice::from_raw_parts(
+                        &*(&self.data[0] as *const T).offset(((count) * self.strides[0]) as isize),
+                        self.len,
+                    )
+                },
+                shape: &self.shape[1..],
+                strides: &self.strides[1..],
+            })
         } else {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let size = self.shape[0] - self.count;
+        (size, Some(size))
+    }
 }
 
-impl<'a, T> NdarrayBase<T> {
-    fn iter_axis(&'a self, axis: usize, mut index: Vec<usize>) -> IterAxisNdarrayBase<'a, T> {
-        index.insert(axis, 0);
-        let offset = self
-            .strides()
-            .iter()
-            .zip(index.iter())
-            .map(|(x, y)| x * y)
-            .sum();
-        IterAxisNdarrayBase {
-            ndarray: self.data().iter(),
-            axis_len: &self.shape()[axis],
-            axis_stride: &self.strides()[axis],
+impl<'a, T> IntoIterator for &'a NdarrayView<'a, T> {
+    type Item = NdarrayView<'a, T>;
+    type IntoIter = ViewIter<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        ViewIter {
+            data: &self.data,
+            shape: &self.shape,
+            strides: &self.strides,
             count: 0,
-            offset: offset,
+            len: self.shape[1..].iter().product(),
+        }
+    }
+}
+
+impl<'a, T> IntoIterator for &'a NdarrayBase<T> {
+    type Item = NdarrayView<'a, T>;
+    type IntoIter = ViewIter<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        ViewIter {
+            data: &self.data,
+            shape: &self.shape,
+            strides: &self.strides,
+            count: 0,
+            len: self.shape[1..].iter().product(),
+        }
+    }
+}
+
+pub struct ViewIterMut<'a, T> {
+    pub data: &'a mut [T],
+    shape: &'a [usize],
+    strides: &'a [usize],
+    count: usize,
+    len: usize,
+}
+
+impl<'a, T> Iterator for ViewIterMut<'a, T> {
+    type Item = NdarrayViewMut<'a, T>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.count < self.shape[0] {
+            let count = self.count;
+            self.count += 1;
+            Some(NdarrayViewMut {
+                data: unsafe {
+                    std::slice::from_raw_parts_mut(
+                        &mut *(&mut self.data[0] as *mut T)
+                            .offset(((count) * self.strides[0]) as isize),
+                        self.len,
+                    )
+                },
+                shape: &self.shape[1..],
+                strides: &self.strides[1..],
+            })
+        } else {
+            None
         }
     }
 
-    fn iter_outer(&'a self, mut index: Vec<usize>) -> IterAxisNdarrayBase<'a, T> {
-        index.push(0);
-        let offset = self
-            .strides()
-            .iter()
-            .zip(index.iter())
-            .map(|(x, y)| x * y)
-            .sum();
-        IterAxisNdarrayBase {
-            ndarray: self.data().iter(),
-            axis_len: &self.shape().last().unwrap(),
-            axis_stride: &self.strides().last().unwrap(),
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let size = self.shape[0] - self.count;
+        (size, Some(size))
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut NdarrayViewMut<'a, T> {
+    type Item = NdarrayViewMut<'a, T>;
+    type IntoIter = ViewIterMut<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        ViewIterMut {
+            data: &mut self.data,
+            shape: &self.shape,
+            strides: &self.strides,
             count: 0,
-            offset: offset,
+            len: self.shape[1..].iter().product(),
         }
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut NdarrayBase<T> {
+    type Item = NdarrayViewMut<'a, T>;
+    type IntoIter = ViewIterMut<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        ViewIterMut {
+            data: Rc::get_mut(&mut self.data).unwrap(),
+            shape: &self.shape,
+            strides: &self.strides,
+            count: 0,
+            len: self.shape[1..].iter().product(),
+        }
+    }
+}
+
+impl<'a, T> NdarrayView<'a, T> {
+    fn iter(&'a self) -> ViewIter<'a, T> {
+        self.into_iter()
+    }
+}
+
+impl<'a, T> NdarrayViewMut<'a, T> {
+    fn iter_mut(&'a mut self) -> ViewIterMut<'a, T> {
+        self.into_iter()
+    }
+}
+
+impl<'a, T> NdarrayBase<T> {
+    fn iter(&'a self) -> ViewIter<'a, T> {
+        self.into_iter()
+    }
+
+    fn iter_mut(&'a mut self) -> ViewIterMut<'a, T> {
+        self.into_iter()
     }
 }

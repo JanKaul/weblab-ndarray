@@ -34,10 +34,22 @@ pub enum NdarrayUnion {
 /// # Example
 ///
 pub struct NdarrayBase<T> {
-    data: Rc<[T]>,
-    shape: Vec<usize>,
-    strides: Vec<usize>,
-    subview: Subview,
+    pub data: Rc<[T]>,
+    pub shape: Vec<usize>,
+    pub strides: Vec<usize>,
+    pub subview: Subview,
+}
+
+pub struct NdarrayView<'a, T> {
+    pub data: &'a [T],
+    pub shape: &'a [usize],
+    pub strides: &'a [usize],
+}
+
+pub struct NdarrayViewMut<'a, T> {
+    pub data: &'a mut [T],
+    pub shape: &'a [usize],
+    pub strides: &'a [usize],
 }
 
 impl<T> NdarrayBase<T> {
@@ -70,7 +82,7 @@ impl<T> NdarrayBase<T> {
 /// Describes if a `Ndarray` behaves like a contigious subview (`Slice`), a set along selected axis (`Pick`) or normally (`None`)
 ///
 /// Subview is used because traits cannot be used at the wasm boundary. To still represent Ndarray as a polymorphic type, its behavior changes according to the value of its Subview field.
-enum Subview {
+pub enum Subview {
     Slice(Vec<usize>),
     Pick(Vec<Vec<usize>>),
     None,
