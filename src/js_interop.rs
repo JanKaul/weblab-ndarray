@@ -5,10 +5,16 @@ use wasm_bindgen::JsCast;
 /// Flattens a given JsArray.
 pub fn flatten_jsarray(input: js_sys::Array, shape: &mut Vec<usize>) -> js_sys::Array {
     if js_sys::Array::is_array(&input.get(0)) {
-        shape.push(input.length().try_into().unwrap());
+        shape.push(
+            input
+                .get(0)
+                .unchecked_into::<js_sys::Array>()
+                .length()
+                .try_into()
+                .unwrap(),
+        );
         flatten_jsarray(input.flat(1), shape)
     } else {
-        shape.push(input.length().try_into().unwrap());
         input
     }
 }
@@ -68,4 +74,15 @@ pub fn into_vec_isize(input: &js_sys::Array) -> Result<Vec<isize>, JsValue> {
             None => Err(JsValue::from_str("Indices must be only numbers")),
         })
         .collect()
+}
+
+#[wasm_bindgen]
+extern "C" {
+    // Use `js_namespace` here to bind `console.log(..)` instead of just
+    // `log(..)`
+    #[wasm_bindgen(js_namespace = console)]
+    pub fn log(s: &str);
+
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    pub fn log_usize(a: usize);
 }
