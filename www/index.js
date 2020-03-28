@@ -7,8 +7,8 @@ import {Ndarray} from "weblab-ndarray";
 //   array1[i] = Math.random();
 //   array2[i] = Math.random();
 // }
-// 
+//
 // var wasm1 = new Ndarray(array1);
 var wasm2 = new Ndarray([[11,12,13],[21,22,23],[31,32,33]]);
 
-console.log(wasm2.slices([[0,2],[0,2]]).get([1,0]));
+console.log(wasm2.slices([[0,2],[0,2]]).get([1,1]));

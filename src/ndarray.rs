@@ -1,4 +1,3 @@
-use adjacent_pair_iterator::AdjacentPairIterator;
 use std::convert::TryInto;
 use std::rc::Rc;
 
@@ -38,13 +37,13 @@ pub struct NdarrayBase<T> {
     pub data: Rc<[T]>,
     pub shape: Vec<usize>,
     pub strides: Vec<usize>,
-    pub subview: Subview,
+    pub format: Format,
 }
 
 /// Describes if a `Ndarray` behaves like a contigious subview (`Slice`), a set along selected axis (`Pick`) or normally (`None`)
 ///
 /// Subview is used because traits cannot be used at the wasm boundary. To still represent Ndarray as a polymorphic type, its behavior changes according to the value of its Subview field.
-pub enum Subview {
+pub enum Format {
     Slice(Vec<usize>),
     Slices(Vec<Vec<usize>>),
     None,
@@ -55,22 +54,28 @@ pub struct NdarrayView<'a, T> {
     pub data: &'a [T],
     pub shape: &'a [usize],
     pub strides: &'a [usize],
+    pub format: FormatView<'a>,
+}
+
+pub enum FormatView<'a> {
+    Slice(&'a [usize]),
+    Slices(&'a [Vec<usize>]),
+    None,
 }
 
 #[wasm_bindgen]
 pub struct NdarrayMut(NdarrayUnionMut);
 
-#[derive(Debug)]
 pub enum NdarrayUnionMut {
     I32(NdarrayBaseMut<i32>),
     F64(NdarrayBaseMut<f64>),
 }
 
-#[derive(Debug)]
 pub struct NdarrayBaseMut<T> {
     data: *mut [T],
     shape: Vec<usize>,
     strides: Vec<usize>,
+    pub format: Format,
 }
 
 /// Struct used for iterators that contains mutable references to an ArrayBase object
@@ -78,6 +83,7 @@ pub struct NdarrayViewMut<'a, T> {
     pub data: &'a mut [T],
     pub shape: &'a [usize],
     pub strides: &'a [usize],
+    pub format: FormatView<'a>,
 }
 
 #[wasm_bindgen]
@@ -104,7 +110,7 @@ impl Ndarray {
                         data: data,
                         strides: Ndarray::get_strides_from_shape(&shape),
                         shape: shape,
-                        subview: Subview::None,
+                        format: Format::None,
                     }))
                 }
                 js_interop::JsType::Int32Array(array) => {
@@ -113,7 +119,7 @@ impl Ndarray {
                         shape: vec![vec.len()],
                         data: Rc::from(vec),
                         strides: vec![1],
-                        subview: Subview::None,
+                        format: Format::None,
                     }))
                 }
                 js_interop::JsType::Float64Array(array) => {
@@ -122,7 +128,7 @@ impl Ndarray {
                         shape: vec![vec.len()],
                         data: Rc::from(vec),
                         strides: vec![1],
-                        subview: Subview::None,
+                        format: Format::None,
                     }))
                 }
                 _ => panic!("Input must be some kind of Array."),
@@ -156,33 +162,28 @@ impl Ndarray {
             .map(|(i, x)| ((x + shape[i] as isize) % (shape[i] as isize)) as usize)
             .collect::<Vec<usize>>();
         assert_eq!(self.strides().len(), indices.len());
-        let index = match self.subview() {
-            Subview::None => self
+        let index = match self.format() {
+            Format::None => self
                 .strides()
                 .iter()
                 .zip(indices.iter())
                 .map(|(x, y)| x * y)
                 .sum::<usize>(),
 
-            Subview::Slice(offset) => self
+            Format::Slice(offset) => self
                 .strides()
                 .iter()
                 .zip(indices.iter())
                 .enumerate()
                 .map(|(i, (x, y))| *x * (offset[i] + y))
                 .sum::<usize>(),
-            Subview::Slices(slices) => {
-                let offset = slices
-                    .iter()
-                    .enumerate()
-                    .map(|(i, x)| x.iter().take(indices[i] + 1).sum::<usize>())
-                    .collect::<Vec<usize>>();
-                self.strides()
-                    .iter()
-                    .zip(offset.iter())
-                    .map(|(x, y)| x * y)
-                    .sum::<usize>()
-            }
+            Format::Slices(slices) => self
+                .strides()
+                .iter()
+                .zip(slices.iter())
+                .enumerate()
+                .map(|(i, (x, y))| x * y[indices[i]])
+                .sum::<usize>(),
         };
         match &self.0 {
             NdarrayUnion::I32(ndarray) => Ok(JsValue::from_f64(ndarray.data[index] as f64)),
@@ -243,47 +244,38 @@ impl Ndarray {
                 data: ndarray.data.clone(),
                 strides: strides,
                 shape: shape,
-                subview: Subview::Slice(offset),
+                format: Format::Slice(offset),
             }))),
             NdarrayUnion::F64(ndarray) => Ok(Ndarray(NdarrayUnion::F64(NdarrayBase {
                 data: ndarray.data.clone(),
                 strides: strides,
                 shape: shape,
-                subview: Subview::Slice(offset),
+                format: Format::Slice(offset),
             }))),
         }
     }
 
     pub fn slices(&self, input: js_sys::Array) -> Result<Ndarray, JsValue> {
         let input = input.to_vec();
-        let mut input = input
+        let input = input
             .iter()
             .map(|x| -> Result<Vec<usize>, JsValue> {
                 js_interop::into_vec_usize(&js_sys::Array::from(&x))
             })
             .collect::<Result<Vec<Vec<usize>>, JsValue>>()?;
         let shape = input.iter().map(|x| x.len()).collect();
-        let slices = input
-            .iter_mut()
-            .map(|mut x| {
-                let mut vec = Vec::with_capacity(x.len() + 1);
-                vec.push(0);
-                vec.append(&mut x);
-                vec.iter().adjacent_pairs().map(|(x, y)| y - x).collect()
-            })
-            .collect();
         match &self.0 {
             NdarrayUnion::I32(ndarray) => Ok(Ndarray(NdarrayUnion::I32(NdarrayBase {
                 data: ndarray.data.clone(),
                 strides: self.strides().clone(),
                 shape: shape,
-                subview: Subview::Slices(slices),
+                format: Format::Slices(input),
             }))),
             NdarrayUnion::F64(ndarray) => Ok(Ndarray(NdarrayUnion::F64(NdarrayBase {
                 data: ndarray.data.clone(),
                 strides: self.strides().clone(),
                 shape: shape,
-                subview: Subview::Slices(slices),
+                format: Format::Slices(input),
             }))),
         }
     }
@@ -328,10 +320,10 @@ impl Ndarray {
         }
     }
     /// Return the field `shape` of an array.
-    pub fn subview(&self) -> &Subview {
+    pub fn format(&self) -> &Format {
         match &self.0 {
-            NdarrayUnion::I32(ndarray) => &ndarray.subview,
-            NdarrayUnion::F64(ndarray) => &ndarray.subview,
+            NdarrayUnion::I32(ndarray) => &ndarray.format,
+            NdarrayUnion::F64(ndarray) => &ndarray.format,
         }
     }
 }
@@ -345,6 +337,7 @@ impl NdarrayMut {
                     data: mut_ref,
                     shape: ndarray.shape.clone(),
                     strides: ndarray.strides.clone(),
+                    format: Format::None,
                 }))),
                 None => Err(JsValue::from_str(
                     "Data must have single owner to be mutated.",
@@ -355,6 +348,7 @@ impl NdarrayMut {
                     data: mut_ref,
                     shape: ndarray.shape.clone(),
                     strides: ndarray.strides.clone(),
+                    format: Format::None,
                 }))),
                 None => Err(JsValue::from_str(
                     "Data must have single owner to be mutated.",
