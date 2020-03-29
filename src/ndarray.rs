@@ -55,6 +55,7 @@ pub struct NdarrayView<'a, T> {
     pub shape: &'a [usize],
     pub strides: &'a [usize],
     pub format: FormatView<'a>,
+    pub len: usize,
 }
 
 pub enum FormatView<'a> {
@@ -72,9 +73,9 @@ pub enum NdarrayUnionMut {
 }
 
 pub struct NdarrayBaseMut<T> {
-    data: *mut [T],
-    shape: Vec<usize>,
-    strides: Vec<usize>,
+    pub data: *mut [T],
+    pub shape: Vec<usize>,
+    pub strides: Vec<usize>,
     pub format: Format,
 }
 
@@ -84,6 +85,7 @@ pub struct NdarrayViewMut<'a, T> {
     pub shape: &'a [usize],
     pub strides: &'a [usize],
     pub format: FormatView<'a>,
+    pub len: usize,
 }
 
 #[wasm_bindgen]
@@ -155,7 +157,7 @@ impl Ndarray {
         // TODO: introduce bound checks
         assert_eq!(js_sys::Array::is_array(&input.get(0)), false);
         let indices = js_interop::into_vec_isize(&input)?;
-        let shape = self.shape();
+        let shape: &Vec<usize> = self.shape();
         let indices: Vec<usize> = indices
             .iter()
             .enumerate()
@@ -236,7 +238,7 @@ impl Ndarray {
             .into_iter()
             .unzip::<usize, (usize, usize), Vec<usize>, Vec<(usize, usize)>>();
         // unzip the second pair
-        let (shape, strides) = rest
+        let (shape, strides): (Vec<usize>, Vec<usize>) = rest
             .into_iter()
             .unzip::<usize, usize, Vec<usize>, Vec<usize>>();
         match &self.0 {
@@ -263,7 +265,7 @@ impl Ndarray {
                 js_interop::into_vec_usize(&js_sys::Array::from(&x))
             })
             .collect::<Result<Vec<Vec<usize>>, JsValue>>()?;
-        let shape = input.iter().map(|x| x.len()).collect();
+        let shape = input.iter().map(|x| x.len()).collect::<Vec<usize>>();
         match &self.0 {
             NdarrayUnion::I32(ndarray) => Ok(Ndarray(NdarrayUnion::I32(NdarrayBase {
                 data: ndarray.data.clone(),
@@ -282,6 +284,27 @@ impl Ndarray {
 }
 
 impl Ndarray {
+    fn new_rust(input: Vec<f64>, shape: Vec<usize>) -> Result<Ndarray, String> {
+        Ok(Ndarray(NdarrayUnion::F64(NdarrayBase {
+            strides: Ndarray::get_strides_from_shape(&shape),
+            shape: shape,
+            data: Rc::from(input),
+            format: Format::None,
+        })))
+    }
+
+    fn view_rust<'a>(&'a self) -> Result<NdarrayView<'a, f64>, String> {
+        match &self.0 {
+            NdarrayUnion::F64(ndarray) => Ok(NdarrayView {
+                data: &ndarray.data,
+                len: ndarray.shape.iter().product::<usize>(),
+                shape: &ndarray.shape,
+                strides: &ndarray.strides,
+                format: FormatView::None,
+            }),
+            NdarrayUnion::I32(_) => Err(String::from("Not the right Data")),
+        }
+    }
     /// Calculates the strides from a given shape.
     fn get_strides_from_shape(shape: &Vec<usize>) -> Vec<usize> {
         let mut m = 1;
