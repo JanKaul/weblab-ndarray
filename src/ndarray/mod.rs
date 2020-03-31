@@ -6,12 +6,15 @@ use wasm_bindgen::prelude::*;
 
 use crate::js_interop;
 
+pub mod test;
+
 /// N-dimensional arary for numerical computations in javascript.
 ///
 /// Ndarray is a n-dimensional container for homogeneous data. It enables efficient manipulation
 /// of data without moving the data in memory.
 ///
 /// # Example
+///
 ///
 #[wasm_bindgen]
 pub struct Ndarray(NdarrayUnion);
@@ -146,6 +149,7 @@ impl Ndarray {
         let vec = js_interop::into_vec_usize(shape)?;
         if vec.iter().product::<usize>() == self.shape().iter().product::<usize>() {
             self.set_strides(Ndarray::get_strides_from_shape(&vec));
+            self.set_shape(vec);
             Ok(())
         } else {
             Err(JsValue::from_str("Shape doesn't fit data."))
@@ -340,6 +344,13 @@ impl Ndarray {
         match &self.0 {
             NdarrayUnion::I32(ndarray) => &ndarray.shape,
             NdarrayUnion::F64(ndarray) => &ndarray.shape,
+        }
+    }
+    /// Sets the field `strides` of the Ndarray according to the input.
+    pub fn set_shape(&mut self, shape: Vec<usize>) {
+        match &mut self.0 {
+            NdarrayUnion::I32(ndarray) => ndarray.shape = shape,
+            NdarrayUnion::F64(ndarray) => ndarray.shape = shape,
         }
     }
     /// Return the field `shape` of an array.

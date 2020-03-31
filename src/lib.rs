@@ -14,14 +14,14 @@
 
 mod iter;
 mod js_interop;
-mod ndarray;
+pub mod ndarray;
 mod utils;
 
 use wasm_bindgen::prelude::*;
 
 pub use ndarray::*;
 
-#[wasm_bindgen(start)]
-pub fn main() {
-    utils::set_panic_hook();
-}
+// #[wasm_bindgen(start)]
+// pub fn main() {
+//     utils::set_panic_hook();
+// }
